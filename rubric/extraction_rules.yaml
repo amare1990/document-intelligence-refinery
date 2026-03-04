@@ -1,4 +1,12 @@
 # Example placeholder:
 # Extraction thresholds and chunking rules
 
-# Placeholder for profiles and extraction ledgers
+triage:
+  min_chars_per_page: 100
+  scanned_char_density_threshold: 0.0005
+  image_area_ratio_threshold: 0.50
+  table_line_threshold: 8
+
+confidence:
+  fast_text_min: 0.70
+  layout_min: 0.60
