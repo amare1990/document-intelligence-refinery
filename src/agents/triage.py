@@ -1,3 +1,4 @@
+# TriageAgent: Responsible for initial document profiling to guide extraction strategy.
 from pathlib import Path
 import json
 import yaml
