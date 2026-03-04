@@ -2,6 +2,9 @@
 from pydantic import BaseModel, Field
 from typing import List, Optional
 
+import uuid
+from hashlib import sha256
+
 
 class BoundingBox(BaseModel):
     """Spatial coordinates on page."""
@@ -35,3 +38,35 @@ class LDU(BaseModel):
 
     token_count: int
     confidence: float = Field(ge=0.0, le=1.0)
+
+    @classmethod
+    def from_text(
+        cls,
+        doc_id: str,
+        text: str,
+        page_number: int,
+        section_path: list[str] | None = None,
+        confidence: float = 1.0,
+        bbox: BoundingBox | None = None,
+    ) -> "LDU":
+        """
+        Factory helper to create LDU from raw text.
+        Generates ldu_id and content_hash automatically.
+        """
+        if section_path is None:
+            section_path = []
+
+        content_hash = sha256(text.encode("utf-8")).hexdigest()
+        token_count = len(text.split())
+
+        return cls(
+            ldu_id=str(uuid.uuid4()),
+            doc_id=doc_id,
+            page_number=page_number,
+            bbox=bbox,
+            text=text,
+            content_hash=content_hash,
+            section_path=section_path,
+            token_count=token_count,
+            confidence=confidence,
+        )
