@@ -54,5 +54,5 @@ class FastTextExtractor(BaseExtractor):
             strategy_used=self.name,
             confidence=confidence,
             ldus=chunks,
-            source_path=file_path
+            source_path=str(file_path)
         )

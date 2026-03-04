@@ -15,7 +15,8 @@ def test_fast_text_strategy_runs(sample_pdf_path):
 
     router = ExtractionRouter()
 
-    result = router.route(sample_pdf_path, profile)
+    # result = router.route(sample_pdf_path, profile)
+    result = router.route(str(sample_pdf_path), profile)
 
     assert result.strategy_used == "fast_text"
     assert result.confidence >= 0

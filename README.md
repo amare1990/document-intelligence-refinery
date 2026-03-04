@@ -92,13 +92,18 @@ data/
 ---
 
 ## Usage
+### Assume
+```
+sample-pdf
+```
 
 ### 1. Run Triage (Stage 1)
 
 **Single PDF:**
 
+
 ```bash
-uv run python -m src.pipelines.run_triage_batch data/Annual_Report_JUNE-2023.pdf
+uv run python -m src.pipelines.run_triage_batch data/sample-pdf
 ```
 
 **Batch mode (all PDFs in `data/`):**
@@ -112,7 +117,7 @@ uv run python -m src.pipelines.run_triage_batch
 **Single PDF:**
 
 ```bash
-uv run python -m src.pipelines.run_extraction_batch .refinery/profiles/Annual_Report_JUNE-2023.json
+uv run python -m src.pipelines.run_extraction_batch .refinery/profiles/sample-pdf
 ```
 
 **Batch mode:**
@@ -134,7 +139,7 @@ Unit tests cover:
 Run all tests:
 
 ```bash
-uv run pytest
+uv run python -m pytest
 ```
 
 ---

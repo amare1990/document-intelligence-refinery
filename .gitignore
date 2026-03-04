@@ -40,4 +40,9 @@ Thumbs.db
 
 # Refinery artifacts (created later)
 .refinery/
+
+# Data directory
 data/
+
+# Pytest cache
+.pytest_cache/
