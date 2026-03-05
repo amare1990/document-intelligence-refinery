@@ -103,7 +103,7 @@ sample-pdf
 
 
 ```bash
-uv run python -m src.pipelines.run_triage_batch data/sample-pdf
+uv run python -m src.pipelines.run_triage_batch "data/sample-pdf"
 ```
 
 **Batch mode (all PDFs in `data/`):**
@@ -117,13 +117,37 @@ uv run python -m src.pipelines.run_triage_batch
 **Single PDF:**
 
 ```bash
-uv run python -m src.pipelines.run_extraction_batch .refinery/profiles/sample-pdf
+uv run python -m src.pipelines.run_extraction_batch "data/sample-pdf"
 ```
 
 **Batch mode:**
 
 ```bash
 uv run python -m src.pipelines.run_extraction_batch
+```
+
+---
+
+### 3. Run Layout Extraction
+
+```bash
+
+uv run python -m src.pipelines.run_layout_extraction "data/sample-pdf"
+```
+
+### 4. Run Vision Extraction
+#### Assume a DocumentedProfile
+
+```
+sample-DocProfile
+
+```
+
+
+```bash
+
+uv run python -m src.pipelines.run_vision_extraction --profile ".refinery/profiles/sample-DocProfile"
+
 ```
 
 ---

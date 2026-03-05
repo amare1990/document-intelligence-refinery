@@ -1,47 +1,74 @@
 # src/pipelines/run_vision_extraction.py
-import sys
+import argparse
+import json
 from pathlib import Path
-import time
+from typing import List
 
-from src.agents.triage import TriageAgent
 from src.strategies.vision_extractor import VisionExtractor
-from src.utils.ledger import log_entry
+from src.models.document_profile import DocumentProfile
+from src.models.extracted_document import ExtractedDocument
 
+def save_extraction_result(extraction: ExtractedDocument, output_dir: Path):
+    """Saves the ExtractedDocument model to a JSON file using Pydantic V2 methods."""
+    output_dir.mkdir(parents=True, exist_ok=True)
+    output_file = output_dir / f"{extraction.doc_id}_extracted.json"
+    try:
+        with open(output_file, "w", encoding="utf-8") as f:
+            json.dump(extraction.model_dump(), f, indent=4, ensure_ascii=False)
+        print(f"[SAVED] {output_file.name}")
+    except Exception as e:
+        print(f"[ERROR] Failed to save {extraction.doc_id}: {e}")
 
-def main(pdf_path: str):
-    pdf_file = Path(pdf_path)
-    if not pdf_file.exists():
-        print(f"[ERROR] File not found: {pdf_file}")
-        return
+def main():
+    parser = argparse.ArgumentParser(description="Vision-only extraction pipeline")
+    parser.add_argument("--batch", action="store_true", help="Process all profiles in .refinery/profiles")
+    parser.add_argument("--profile", type=str, help="Process a single DocumentProfile JSON")
+    parser.add_argument("--out-dir", type=str, default=".refinery/extractions", help="Output folder")
+    parser.add_argument("--data-dir", type=str, default="data", help="Folder containing PDF source files")
 
-    # 1️⃣ Generate DocumentProfile via triage
-    triage = TriageAgent()
-    profile = triage.generate_profile(str(pdf_file))
-    print(f"[INFO] Generated profile for {profile.doc_id}:\n{profile.model_dump_json(indent=2)}\n")
-
-    # 2️⃣ Run VisionExtractor
+    args = parser.parse_args()
+    out_path = Path(args.out_dir)
+    data_root = Path(args.data_dir)
     extractor = VisionExtractor()
-    start_time = time.time()
-    extracted = extractor.extract(str(pdf_file), profile)
-    elapsed_ms = int((time.time() - start_time) * 1000)
 
-    print(f"[INFO] Vision extraction result:\n{extracted.model_dump_json(indent=2)}\n")
+    # --- Single profile mode ---
+    if args.profile:
+        profile_file = Path(args.profile)
+        if not profile_file.exists():
+            print(f"[!] Profile not found: {profile_file}")
+            return
 
-    # 3️⃣ Log the extraction to ledger
-    log_entry({
-        "doc_id": profile.doc_id,
-        "source_path": str(pdf_file),
-        "strategy_used": extracted.strategy_used,
-        "confidence_score": extracted.confidence,
-        "estimated_extraction_cost": profile.estimated_extraction_cost,
-        "processing_time_ms": elapsed_ms,
-    })
+        profile = DocumentProfile.model_validate(json.loads(profile_file.read_text()))
+        pdf_path = data_root / f"{profile.doc_id}.pdf"
+        if not pdf_path.exists():
+            print(f"[!] PDF file missing for {profile.doc_id}: {pdf_path}")
+            return
 
-    print("[INFO] Ledger updated.")
+        print(f"[*] Extracting Vision from {profile.doc_id}...")
+        result = extractor.extract(pdf_path, profile)
+        save_extraction_result(result, out_path)
 
+    # --- Batch mode ---
+    elif args.batch:
+        profile_dir = Path(".refinery/profiles")
+        if not profile_dir.exists():
+            print(f"[!] Profile directory missing: {profile_dir}")
+            return
+
+        for profile_file in profile_dir.glob("*.json"):
+            profile = DocumentProfile.model_validate(json.loads(profile_file.read_text()))
+            pdf_path = data_root / f"{profile.doc_id}.pdf"
+            if not pdf_path.exists():
+                print(f"[!] PDF file missing for {profile.doc_id}")
+                continue
+
+            print(f"[*] Extracting Vision from {profile.doc_id}...")
+            result = extractor.extract(pdf_path, profile)
+            save_extraction_result(result, out_path)
+
+    else:
+        print("[!] Specify --profile <file> or --batch to run the extraction.")
+        parser.print_help()
 
 if __name__ == "__main__":
-    if len(sys.argv) < 2:
-        print("Usage: uv run python -m src.pipelines.run_vision_extraction <path_to_pdf>")
-    else:
-        main(sys.argv[1])
+    main()
