@@ -135,6 +135,21 @@ uv run python -m src.pipelines.run_extraction_batch
 uv run python -m src.pipelines.run_layout_extraction "data/sample-pdf"
 ```
 
+### 4. Run Vision Extraction
+#### Assume a DocumentedProfile
+
+```
+sample-DocProfile
+
+```
+
+
+```bash
+
+uv run python -m src.pipelines.run_vision_extraction --profile ".refinery/profiles/sample-DocProfile"
+
+```
+
 ---
 
 ## Testing
