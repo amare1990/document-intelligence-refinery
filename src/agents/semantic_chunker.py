@@ -1,5 +1,3 @@
-# src/agents/semantic_chunker.py
-
 import re
 from typing import List
 
@@ -11,34 +9,87 @@ class SemanticChunker:
     """
     Stage 3 Agent.
 
-    Converts extracted document text into Logical Document Units (LDUs).
+    Converts extracted document text into Logical Document Units (LDUs)
+    while preserving document hierarchy when possible.
     """
 
+    # Detects numbered section headers like:
+    # 1 Introduction
+    # 2.1 Budget Overview
+    HEADER_PATTERN = r"^\d+(\.\d+)*\s+.+"
+
     def chunk(self, extracted_doc: ExtractedDocument) -> ExtractedDocument:
+        """
+        Transform raw extracted text into structured LDUs.
+        """
+
         if not extracted_doc.raw_text:
             return extracted_doc
 
-        paragraphs = self._split_into_blocks(extracted_doc.raw_text)
+        lines = extracted_doc.raw_text.split("\n")
 
         ldus: List[LDU] = []
 
-        for block in paragraphs:
-            ldu = LDU.from_text(
-                doc_id=extracted_doc.doc_id,
-                text=block,
-                page_number=1,
-                confidence=extracted_doc.confidence,
-                section_path=[],
-            )
+        buffer: List[str] = []
+        current_section: List[str] = []
 
-            ldus.append(ldu)
+        for line in lines:
+
+            line = line.strip()
+
+            if not line:
+                continue
+
+            # Detect section header
+            if self._is_header(line):
+
+                # flush previous block
+                if buffer:
+                    ldus.append(
+                        self._create_ldu(
+                            extracted_doc,
+                            " ".join(buffer),
+                            current_section
+                        )
+                    )
+                    buffer = []
+
+                current_section = [line]
+                continue
+
+            buffer.append(line)
+
+        # flush final block
+        if buffer:
+            ldus.append(
+                self._create_ldu(
+                    extracted_doc,
+                    " ".join(buffer),
+                    current_section
+                )
+            )
 
         extracted_doc.ldus = ldus
         return extracted_doc
 
-    def _split_into_blocks(self, text: str) -> List[str]:
+    def _is_header(self, line: str) -> bool:
+        """Detect section header lines."""
+        return bool(re.match(self.HEADER_PATTERN, line))
+
+    def _create_ldu(
+        self,
+        extracted_doc: ExtractedDocument,
+        text: str,
+        section_path: List[str],
+    ) -> LDU:
         """
-        Split document into semantic blocks.
+        Create LDU from buffered text.
         """
-        blocks = re.split(r"\n\s*\n", text)
-        return [b.strip() for b in blocks if b.strip()]
+
+        return LDU.from_text(
+            doc_id=extracted_doc.doc_id,
+            text=text,
+            page_number=1,  # placeholder until page-level extraction
+            section_path=section_path,
+            confidence=extracted_doc.confidence,
+        )
