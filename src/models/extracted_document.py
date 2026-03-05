@@ -22,4 +22,4 @@ class ExtractedDocument(BaseModel):
     metadata: Dict[str, str] = {}
 
     # After chunking this gets populated
-    ldus: List[LDU] = []
+    ldus: List[LDU] = Field(default_factory=list)

@@ -128,6 +128,15 @@ uv run python -m src.pipelines.run_extraction_batch
 
 ---
 
+### 3. Run Layout Extraction
+
+```bash
+
+uv run python -m src.pipelines.run_layout_extraction "data/sample-pdf"
+```
+
+---
+
 ## Testing
 
 Unit tests cover:
