@@ -103,7 +103,7 @@ sample-pdf
 
 
 ```bash
-uv run python -m src.pipelines.run_triage_batch data/sample-pdf
+uv run python -m src.pipelines.run_triage_batch "data/sample-pdf"
 ```
 
 **Batch mode (all PDFs in `data/`):**
@@ -117,7 +117,7 @@ uv run python -m src.pipelines.run_triage_batch
 **Single PDF:**
 
 ```bash
-uv run python -m src.pipelines.run_extraction_batch .refinery/profiles/sample-pdf
+uv run python -m src.pipelines.run_extraction_batch "data/sample-pdf"
 ```
 
 **Batch mode:**
