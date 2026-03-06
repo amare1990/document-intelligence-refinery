@@ -3,6 +3,8 @@
 import time
 from src.utils.ledger import log_entry
 
+from pathlib import Path
+
 from src.models.document_profile import DocumentProfile
 from src.models.extracted_document import ExtractedDocument
 
@@ -22,6 +24,9 @@ class ExtractionRouter:
         fast_text → layout_model → vision_model
         until confidence threshold satisfied.
     """
+
+    # Define the storage location
+    STORAGE_DIR = Path(".refinery/extractions")
 
     CONFIDENCE_THRESHOLD = 0.80
 
@@ -45,6 +50,23 @@ class ExtractionRouter:
             "layout_model": LayoutExtractor(),
             "vision_model": VisionExtractor(),
         }
+
+        # 3️⃣ Ensure the storage directory exists on initialization
+        self.STORAGE_DIR.mkdir(parents=True, exist_ok=True)
+
+    def _persist_result(self, result: ExtractedDocument, original_path: str):
+        """Internal helper to save the JSON to disk."""
+        file_stem = Path(original_path).stem
+        output_path = self.STORAGE_DIR / f"{file_stem}.json"
+
+        # Debug print to see where it's trying to save
+        print(f"[DEBUG] Attempting to save to: {output_path.absolute()}")
+
+        with open(output_path, "w", encoding="utf-8") as f:
+            # Assuming ExtractedDocument is a Pydantic model
+            f.write(result.model_dump_json(indent=2))
+
+        return output_path
 
     def route(
         self,
@@ -75,6 +97,10 @@ class ExtractionRouter:
                 break
 
         assert result is not None
+
+
+        # Save to .refinery/extractions before returning
+        saved_path = self._persist_result(result, file_path)
 
         # ----------------------------
         # 3. ledger logging
