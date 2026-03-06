@@ -13,7 +13,7 @@ from src.models.document_profile import DocumentProfile
 from src.models.extracted_document import ExtractedDocument
 from src.models.ldu import LDU
 
-load_dotenv()
+load_dotenv(".env")
 
 class VisionExtractor(BaseExtractor):
     name = "vision_model"

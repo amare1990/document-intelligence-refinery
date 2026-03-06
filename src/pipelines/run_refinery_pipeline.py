@@ -18,9 +18,9 @@ from pathlib import Path
 
 from src.agents.triage import TriageAgent
 from src.agents.extractor import ExtractionRouter
-from src.agents.semantic_chunker import SemanticChunker
-from src.agents.page_index_builder import PageIndexBuilder
-from src.agents.query_agent import SemanticQueryAgent
+from src.agents.chunker import SemanticChunker
+from src.agents.indexer import PageIndexer
+from src.agents.query_agent import QueryAgent
 
 from src.adapters.embedding_store import LDUVectorStore
 
@@ -31,6 +31,7 @@ REFINERY = Path(".refinery")
 LDUS_DIR = REFINERY / "ldus"
 EXTRACTIONS_DIR = REFINERY / "extractions"
 PAGEINDEX_DIR = REFINERY / "page_index"
+
 
 
 def ensure_dirs():
@@ -106,10 +107,10 @@ def run_pipeline(pdf_path: str, query: str | None = None):
 
     print("\n[Stage 4] PageIndex Builder")
 
-    index_builder = PageIndexBuilder()
+    index_builder = PageIndexer()
     page_index = index_builder.build(enriched)
 
-    index_file = PAGEINDEX_DIR / f"{profile.doc_id}.json"
+    index_file = PAGEINDEX_DIR / f"{profile.doc_id}_page_index.json"
 
     with open(index_file, "w", encoding="utf-8") as f:
         json.dump(page_index.model_dump(), f, indent=2)
@@ -126,6 +127,8 @@ def run_pipeline(pdf_path: str, query: str | None = None):
 
     store.add_ldus(enriched.ldus)
 
+    store.save()
+
     print("Vector index updated")
 
     # ---------------------------------------------------
@@ -136,9 +139,12 @@ def run_pipeline(pdf_path: str, query: str | None = None):
 
         print("\n[Stage 6] Semantic Query")
 
-        agent = SemanticQueryAgent(store)
+        agent = QueryAgent(store)
 
-        result = agent.query(query)
+        result = agent.query(
+            doc_id=profile.doc_id,
+            question=query
+        )
 
         print("\nQuery:", query)
         print("\nProvenance:")
@@ -148,7 +154,8 @@ def run_pipeline(pdf_path: str, query: str | None = None):
             section = " > ".join(step.section_path) if step.section_path else "N/A"
 
             print(
-                f"Doc:{step.doc_id} | Page:{step.page_number} | Section:{section} | LDU:{step.ldu_id}"
+                f"Doc:{step.doc_id} | Page:{step.page_number} | "
+                f"Section:{section} | LDU:{step.ldu_id}"
             )
 
         print("\nConfidence:", result.overall_confidence)
