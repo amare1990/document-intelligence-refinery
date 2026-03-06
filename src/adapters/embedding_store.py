@@ -27,12 +27,6 @@ INDEX_FILE = VECTOR_DIR / "faiss.index"
 META_FILE = VECTOR_DIR / "ldu_metadata.json"
 
 
-import os
-from dotenv import load_dotenv
-from openai import OpenAI
-
-load_dotenv()
-
 
 class LDUVectorStore:
 
@@ -94,7 +88,10 @@ class LDUVectorStore:
 
         for idx, i in enumerate(indices[0]):
 
-            if i < 0 or i >= len(self.ldus):
+            if i == -1:
+                continue
+
+            if i >= len(self.ldus):
                 continue
 
             results.append((self.ldus[i], float(distances[0][idx])))
@@ -118,3 +115,6 @@ class LDUVectorStore:
 
         self.ldus = [LDU(**d) for d in data]
         self.ids = [ldu.ldu_id for ldu in self.ldus]
+
+        if self.index.ntotal != len(self.ldus):
+            print("Warning: FAISS index and metadata mismatch")

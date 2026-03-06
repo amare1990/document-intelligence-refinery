@@ -4,7 +4,7 @@ import argparse
 from pathlib import Path
 import json
 
-from src.agents.query_agent import SemanticQueryAgent
+from src.agents.query_agent import QueryAgent
 from src.adapters.embedding_store import LDUVectorStore
 from src.utils.ldu_loader import load_ldus
 
@@ -29,7 +29,7 @@ def main():
 
     parser.add_argument(
         "--pageindex-dir",
-        default=".refinery/pageindex",
+        default=".refinery/page_index",
         type=str
     )
 
@@ -57,18 +57,31 @@ def main():
     ldus = load_ldus(ldus_path)
 
     print("[*] Building vector store...")
-    store = LDUVectorStore(api_key=args.openai_api_key)
+    store = LDUVectorStore()
 
     store.add_ldus(ldus)
 
-    print("[*] Initializing SemanticQueryAgent...")
-    agent = SemanticQueryAgent(
-        store=store
-    )
+    store.save()
+
+    print("Vector index updated")
+
+    print("[*] Initializing QueryAgent...")
+    agent = QueryAgent(store)
 
     print(f"[*] Running query: {args.query}")
 
-    provenance_chain = agent.query(args.query, top_k=args.top_k)
+
+    doc_id = ldus[0].doc_id if ldus else None
+
+    if not doc_id:
+        print("[!] No LDUs found.")
+        return
+
+    provenance_chain = agent.query(
+        doc_id=doc_id,
+        question=args.query,
+        top_k=args.top_k
+    )
 
     print("\nProvenance Steps:")
     for step in provenance_chain.steps:

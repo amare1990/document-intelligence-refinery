@@ -6,13 +6,17 @@
 """
 # run_build_vector_index.py
 
+import os
 import json
 import argparse
 from pathlib import Path
 
+from dotenv import load_dotenv
+
 from src.adapters.embedding_store import LDUVectorStore
 from src.models.ldu import LDU
 
+load_dotenv(".env")
 
 def main():
 
@@ -27,9 +31,10 @@ def main():
 
     ldus = [LDU(**l) for l in data]
 
-    api_key = input("Enter OpenAI API Key: ")
+    # api_key = input("Enter OpenAI API Key: ")
+    api_key = os.getenv("OPENAI_API_KEY")
 
-    store = LDUVectorStore(api_key)
+    store = LDUVectorStore()
 
     print(f"Embedding {len(ldus)} LDUs...")
 

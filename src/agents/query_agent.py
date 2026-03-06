@@ -1,62 +1,185 @@
 """
-This module defines the QueryAgent class, which is responsible for handling user queries and
-generating provenance chains based on the results retrieved from the vector store.
-The QueryAgent class interacts with the VectorStore to search for relevant LDUs based on the user's query
-and constructs a ProvenanceChain that captures the steps taken to arrive at the answer. Each step in the
-provenance chain includes information about the document ID, LDU ID, page number, content hash, and confidence score.
-The overall confidence of the provenance chain is also calculated based on the individual steps.
-The QueryAgent class serves as a crucial component in the system for managing and retrieving document content,
-providing a structured way to trace the origins of the information used to answer user queries.
-The implementation assumes that the ProvenanceChain and ProvenanceStep classes are defined in
-the src.models.provenance_chain module, and that the VectorStore class is defined in the src.adapters.vector_store module.
-The QueryAgent class can be extended with additional functionality such as error handling, logging, and support
-for more complex query processing as needed. The provided code is a basic implementation and can be modified to
-fit specific use cases or requirements of the application.
+Query Interface Agent
+
+Handles natural language queries over processed documents.
+
+Implements three logical tools:
+1. pageindex_navigate  – locate relevant sections
+2. semantic_search     – retrieve LDUs via vector search
+3. structured_query    – reserved for fact-table SQL queries
+
+Returns a ProvenanceChain with full source traceability.
+"""
+
+"""
+Query Interface Agent
+
+Handles natural language queries over processed documents.
+
+Tools:
+1. pageindex_navigate  – locate relevant sections
+2. semantic_search     – retrieve LDUs via vector search
+3. structured_query    – SQL queries over fact tables
+
+Returns a ProvenanceChain with full source traceability.
 """
 # src/agents/query_agent.py
 
-from typing import List
+from typing import List, Tuple, Optional
 
+from src.models.ldu import LDU
 from src.models.provenance_chain import ProvenanceChain, ProvenanceStep
 from src.adapters.embedding_store import LDUVectorStore
-from src.utils.page_index_lookup import load_page_index, find_section
+from src.adapters.fact_table_store import FactTableStore
+from src.utils.page_index_lookup import load_page_index, find_relevant_sections
+from src.agents.audit_agent import AuditAgent
 
 
-class SemanticQueryAgent:
+class QueryAgent:
+    """
+    Stage 5 Query Interface Agent
+    """
 
-    def __init__(self, store: LDUVectorStore):
-        self.store = store
+    def __init__(self, vector_store, fact_store=None):
+        self.vector_store = vector_store
+        self.fact_store = fact_store
+        self.audit_agent = AuditAgent()
 
-    def query(self, question: str, top_k: int = 5) -> ProvenanceChain:
+    # ------------------------------------------------
+    # TOOL 1 — PageIndex Navigation
+    # ------------------------------------------------
 
-        results = self.store.search(question, top_k)
+    def pageindex_navigate(self, doc_id: str, query: str) -> List[str]:
+        """
+        Traverse PageIndex tree to find relevant sections.
+        """
+
+        index = load_page_index(doc_id)
+
+        if not index:
+            return []
+
+        return find_relevant_sections(index.root, query)
+
+    # ------------------------------------------------
+    # TOOL 2 — Semantic Search
+    # ------------------------------------------------
+
+    def semantic_search(self, query: str, top_k: int = 5) -> List[Tuple[LDU, float]]:
+        """
+        Retrieve semantically similar LDUs.
+        """
+
+        return self.vector_store.search(query, top_k)
+
+    # ------------------------------------------------
+    # TOOL 3 — Structured Query
+    # ------------------------------------------------
+
+    def structured_query(self, query: str):
+        """
+        Execute SQL queries against fact tables.
+        """
+
+        if not self.fact_store:
+            return None
+
+        return self.fact_store.query(query)
+
+    # ------------------------------------------------
+    # QUERY TYPE ROUTER
+    # ------------------------------------------------
+
+    def detect_query_type(self, question: str) -> str:
+        """
+        Simple heuristic routing.
+        """
+
+        numeric_keywords = [
+            "total",
+            "sum",
+            "average",
+            "count",
+            "revenue",
+            "amount",
+            "table",
+        ]
+
+        if any(k in question.lower() for k in numeric_keywords):
+            return "structured"
+
+        return "semantic"
+
+    # ------------------------------------------------
+    # MAIN QUERY PIPELINE
+    # ------------------------------------------------
+
+    def query(self, doc_id: str, question: str, top_k: int = 5) -> ProvenanceChain:
+        """
+        Execute a document query with provenance tracking.
+        """
+
+        query_type = self.detect_query_type(question)
+
+        # ----------------------------
+        # Structured SQL Query
+        # ----------------------------
+
+        if query_type == "structured":
+            result = self.structured_query(question)
+
+            return ProvenanceChain(
+                query=question,
+                steps=[],
+                overall_confidence=1.0 if result else 0.0,
+            )
+
+        # ----------------------------
+        # Semantic Retrieval
+        # ----------------------------
+
+        sections = self.pageindex_navigate(doc_id, question)
+
+        results = self.semantic_search(question, top_k)
+
+
+        evidence_texts = [ldu.text for ldu, _ in results]
+
+        audit_result = self.audit_agent.verify_claim(
+            question,
+            evidence_texts
+        )
+
 
         steps: List[ProvenanceStep] = []
 
         for ldu, score in results:
 
-            section_path = []
-
-            index = load_page_index(ldu.doc_id)
-
-            if index:
-                section_path = find_section(index.root, ldu.page_number, [])
+            bbox = None
+            if ldu.bbox:
+                bbox = [ldu.bbox.x0, ldu.bbox.y0, ldu.bbox.x1, ldu.bbox.y1]
 
             step = ProvenanceStep(
                 doc_id=ldu.doc_id,
                 ldu_id=ldu.ldu_id,
                 page_number=ldu.page_number,
+                bbox=bbox,
                 content_hash=ldu.content_hash,
                 confidence=1 - score,
-                section_path=section_path,
+                section_path=ldu.section_path,
             )
 
             steps.append(step)
 
-        confidence = sum(s.confidence for s in steps) / len(steps) if steps else 0
+        overall_confidence = (
+            sum(s.confidence for s in steps) / len(steps) if steps else 0
+        )
 
         return ProvenanceChain(
             query=question,
             steps=steps,
-            overall_confidence=confidence,
+            overall_confidence=overall_confidence,
+            audit=audit_result
         )
+
+
