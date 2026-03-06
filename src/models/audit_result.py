@@ -1,10 +1,10 @@
 from pydantic import BaseModel
-from typing import Optional
+from typing import List
 
 
 class AuditResult(BaseModel):
 
-    claim: str
-    verdict: str  # verified | unsupported | unverifiable
-    evidence_ldu: Optional[str] = None
-    explanation: Optional[str] = None
+    verified: bool
+    confidence: float
+    status: str  # "verified" | "unverifiable"
+    supporting_evidence: List[str]

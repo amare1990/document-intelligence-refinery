@@ -13,6 +13,8 @@ from src.models.document_profile import DocumentProfile
 from src.models.extracted_document import ExtractedDocument
 from src.models.ldu import LDU
 
+from pathlib import Path
+
 load_dotenv(".env")
 
 class VisionExtractor(BaseExtractor):
@@ -26,6 +28,7 @@ class VisionExtractor(BaseExtractor):
         self.model_id = "gemini-2.0-flash"
 
     def extract(self, file_path: Path, profile: DocumentProfile) -> ExtractedDocument:
+        file_path = Path(file_path)
         chunks: List[LDU] = []
 
         with fitz.open(str(file_path)) as doc:

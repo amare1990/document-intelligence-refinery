@@ -5,13 +5,33 @@
 
 ## Document Intelligence Refinery
 
-The Document Intelligence Refinery is a multi-stage, agentic pipeline designed to transform heterogeneous enterprise documents (PDFs, scans, spreadsheets, and slide decks) into structured, queryable, spatially-indexed knowledge. It ensures high extraction fidelity by combining fast text, layout-aware, and vision-augmented strategies, while preserving logical document units and full provenance. The system enables enterprises to rapidly unlock the value of their document repositories for reliable retrieval, analysis, and audit.
+Enterprise document repositories contain heterogeneous documents including native PDFs, scanned reports, financial statements, technical papers, and slide decks. These documents encode critical knowledge but are difficult to analyze automatically due to structural complexity and inconsistent formatting.
+
+The **Document Intelligence Refinery** is a multi-stage, agentic pipeline that transforms these documents into **structured, spatially-indexed, and queryable knowledge**. The system prioritizes **extraction fidelity**, **provenance preservation**, and **cost-efficient processing** by dynamically routing documents through multiple extraction strategies.
+
+The architecture is designed to balance **accuracy, cost, and scalability**, ensuring that high-cost vision models are only used when simpler extraction techniques fail.
 
 ---
 
-## 1. Extraction Strategy Decision Tree
+# 1. Document Class Taxonomy
 
-The goal is to decide **which extraction strategy to use** for a given document based on its type and layout.
+Understanding document classes is essential because **different document types fail in different ways**.
+
+| Document Class        | Typical Example                      | Structural Properties    | Extraction Risk |
+| --------------------- | ------------------------------------ | ------------------------ | --------------- |
+| Native Digital PDF    | Annual reports, research papers      | Embedded text stream     | Low             |
+| Multi-column Layout   | Journals, magazines                  | Complex reading order    | Medium          |
+| Table-heavy Documents | Financial statements                 | Dense tabular structures | Medium          |
+| Scanned Documents     | Contracts, legacy archives           | Image-only               | High            |
+| Hybrid Documents      | Slides or reports with images + text | Mixed modalities         | High            |
+
+This taxonomy informs the **triage routing logic** used in the extraction stage.
+
+---
+
+# 2. Extraction Strategy Decision Tree
+
+The system uses a **confidence-gated routing mechanism** to select the optimal extraction strategy.
 
 ```
                  +--------------------+
@@ -19,105 +39,268 @@ The goal is to decide **which extraction strategy to use** for a given document 
                  +--------------------+
                            |
                            v
-                   [Triage Agent]
+                    [Triage Agent]
        Detect: origin_type | layout_complexity | domain_hint | language
                            |
-       --------------------------------------------------------
-       |                       |                               |
-Native Digital          Scanned/Image                 Mixed / Complex
-(single column)        (no text stream)         (multi-column, tables)
-       |                       |                               |
-       v                       v                               v
-[Strategy A]            [Strategy C]                  [Strategy B]
-Fast Text Extractor     Vision-Augmented           Layout-Aware Extractor
-(pdfplumber / pymupdf)  (VLM: GPT-4o, Gemini)      (MinerU / Docling)
-       |                       |                               |
-Confidence Check → Escalate if Low  --------------------------
+        -----------------------------------------------------
+        |                     |                             |
+Native Digital          Multi-column               Scanned/Image
+Single Column           Table-heavy                No text stream
+        |                     |                             |
+        v                     v                             v
+[Strategy A]            [Strategy B]                  [Strategy C]
+Fast Text Extractor     Layout-Aware Extractor       Vision Extractor
+(pdfplumber)            (Docling / MinerU)           (Gemini / GPT-4o)
+        |                     |                             |
+        +---------- Confidence Evaluation ------------------+
+                           |
+                   Escalate if Low
 ```
 
-**Notes:**
+### Strategy Cost Hierarchy
 
-* **Strategy A (Fast Text)**: Low-cost, digital PDFs with high character density.
-* **Strategy B (Layout-Aware)**: Medium-cost, multi-column or table-heavy documents.
-* **Strategy C (Vision-Augmented)**: High-cost, scanned documents or low-confidence pages.
+| Strategy          | Cost     | Speed     | Accuracy               |
+| ----------------- | -------- | --------- | ---------------------- |
+| FastTextExtractor | Very Low | Very Fast | High (digital docs)    |
+| LayoutExtractor   | Medium   | Moderate  | High (complex layouts) |
+| VisionExtractor   | High     | Slow      | Highest (scanned docs) |
 
-**Escalation Guard:** Any low-confidence extraction automatically escalates to the next strategy to prevent hallucinations in downstream RAG.
-
----
-
-## 2. Failure Modes Observed Across Document Types
-
-| Failure Mode                    | Document Class              | Observations                                                                | Mitigation Idea                                                   |
-| ------------------------------- | --------------------------- | --------------------------------------------------------------------------- | ----------------------------------------------------------------- |
-| Structure Collapse              | All Classes                 | Tables split incorrectly, multi-column layouts flattened                    | Use layout-aware extraction or vision-based OCR for complex pages |
-| Context Poverty                 | All Classes                 | Chunking naively by tokens breaks logical units (tables, captions, clauses) | Implement semantic chunking respecting LDUs                       |
-| Provenance Blindness            | All Classes                 | Cannot trace data back to page or bounding box                              | Store bounding boxes and page refs with content_hash for each LDU |
-| OCR Noise                       | Scanned Docs                | Handwriting or faint scans misread by naive OCR                             | Vision-augmented extraction with confidence threshold             |
-| Numeric Precision Loss          | Financial/Structured tables | Floating point misreads, commas vs periods                                  | Table-aware extraction, cross-verify with headers                 |
-| Reading Order Misinterpretation | Multi-column                | Columns read in wrong sequence                                              | MinerU / Docling layout parsing to reconstruct order              |
-| Figure/Caption Separation       | Technical Reports           | Figures separated from captions                                             | Capture as a combined LDU with metadata                           |
-| Cross-reference Breakage        | Legal / Financial           | References to tables/figures lost in chunking                               | Store parent_section and cross-reference links in LDU             |
+Routing ensures the system **minimizes cost while maintaining fidelity**.
 
 ---
 
-## 3. Core Tool Insights
+# 3. Confidence-Gated Escalation Logic
 
-| Tool                                                | Purpose                             | Key Insight                                                                                                                                    |
-| --------------------------------------------------- | ----------------------------------- | ---------------------------------------------------------------------------------------------------------------------------------------------- |
-| [MinerU](https://github.com/opendatalab/MinerU)     | Layout-aware PDF extraction         | Multi-model pipeline: PDF Extract Kit → Layout Detection → Formula/Table Recognition → Markdown export. Specialized models for each structure. |
-| [Docling](https://github.com/DS4SD/docling)         | Enterprise document understanding   | Unified DoclingDocument representation; captures text, tables, figures in one traversable object. Ideal for standardizing output.              |
-| [PageIndex](https://github.com/VectifyAI/PageIndex) | Hierarchical navigation / smart TOC | Section-level indexing; allows RAG to locate relevant chunks without scanning entire document.                                                 |
-| [Chunkr](https://github.com/lumina-ai-inc/chunkr)   | RAG-optimized chunking              | Chunk boundaries respect semantic units (paragraphs, table cells, captions) rather than token counts → improves retrieval precision.           |
-| [Marker](https://github.com/VikParuchuri/marker)    | PDF → Markdown                      | Handles multi-column layouts, equations, and figures better than naive OCR; good reference for layout handling.                                |
+Extraction confidence is estimated using:
 
----
+* character density
+* layout consistency
+* table structure detection
+* OCR reliability score
 
-## 4. Pipeline Diagram (Mermaid)
+Example routing logic:
 
-```mermaid
-flowchart TD
-    A[Document Input] --> B[Triage Agent]
-    B -->|Native Digital| C[Strategy A: Fast Text]
-    B -->|Multi-column/Table-heavy| D[Strategy B: Layout-Aware]
-    B -->|Scanned/Low Confidence| E[Strategy C: Vision-Augmented]
-    C --> F[Semantic Chunking Engine]
-    D --> F
-    E --> F
-    F --> G[PageIndex Builder]
-    G --> H[Query Interface Agent]
-    H --> I[RAG/Fact Table Queries with Provenance]
+```
+if confidence >= 0.85:
+    accept result
+elif 0.6 <= confidence < 0.85:
+    escalate to layout extractor
+else:
+    escalate to vision extractor
 ```
 
-**Legend:**
-
-* **Triage Agent:** Classifies document type, layout, language, domain.
-* **Strategies A/B/C:** Confidence-gated extractors.
-* **Chunking Engine:** Converts extraction into LDUs.
-* **PageIndex:** Builds navigable hierarchical structure.
-* **Query Agent:** Provides structured query interface with full provenance.
+This prevents **low-quality extractions from propagating downstream into RAG systems**, which would otherwise produce hallucinated answers.
 
 ---
 
-## 5. Key Takeaways
+# 4. Failure Modes Across Document Classes
 
-1. **Vision vs OCR:**
+| Failure Mode           | Document Class    | Root Cause                               | Mitigation                    |
+| ---------------------- | ----------------- | ---------------------------------------- | ----------------------------- |
+| Structure Collapse     | Multi-column PDFs | Linear text extraction ignores layout    | Layout-aware parsing          |
+| OCR Noise              | Scanned docs      | Low-quality scan or handwriting          | Vision models                 |
+| Table Fragmentation    | Financial reports | Tables extracted as plain text           | Table-aware layout extraction |
+| Reading Order Errors   | Journals          | Column ordering lost                     | Layout graph reconstruction   |
+| Numeric Precision Loss | Financial docs    | OCR confusion (1 vs l, comma vs decimal) | Table verification            |
+| Caption Detachment     | Technical reports | Figures separated from captions          | Combine figure + caption LDU  |
+| Reference Breakage     | Legal documents   | Cross-references lost during chunking    | Section-aware indexing        |
 
-   * For multi-column financial tables or scanned reports, vision models outperform traditional OCR in **structure fidelity** and **numeric precision**.
-   * Cost tradeoff: only escalate low-confidence pages to VisionExtractor.
-
-2. **Semantic Chunking:**
-
-   * Token-based chunking is insufficient; must preserve logical document units (LDUs).
-
-3. **Provenance is Mandatory:**
-
-   * Every extracted fact should carry `page_number`, `bounding_box`, and `content_hash`.
-
-4. **Decision Tree Rules:**
-
-   * Native + single column → Strategy A
-   * Complex/multi-column → Strategy B
-   * Scanned or low-confidence → Strategy C
+These observations motivated the **multi-strategy architecture** used in the pipeline.
 
 ---
 
+# 5. Logical Document Units (LDUs)
+
+Traditional RAG pipelines chunk text using fixed token windows. This breaks semantic structures such as:
+
+* tables
+* figure captions
+* bullet lists
+* section headers
+
+Instead, the refinery produces **Logical Document Units (LDUs)**.
+
+An LDU represents the **smallest semantically complete unit** of a document.
+
+Example:
+
+```
+LDU:
+  doc_id: annual_report
+  page: 12
+  type: table
+  bbox: [x1, y1, x2, y2]
+  text: Revenue grew 12% YoY
+  content_hash: 9f3ab2...
+```
+
+Advantages:
+
+* preserves structural meaning
+* enables spatial referencing
+* improves retrieval accuracy
+
+---
+
+# 6. Provenance and PageIndex
+
+A core design goal is **verifiability**.
+
+Each answer returned by the query agent includes:
+
+* page number
+* bounding box coordinates
+* content hash
+* extraction strategy used
+
+This information forms a **ProvenanceChain**.
+
+Example:
+
+```
+Query → LDU Match → PageIndex Section → Source Page
+```
+
+### Why PageIndex Matters
+
+Vector search alone often retrieves semantically similar content but ignores document structure.
+
+Example query:
+
+> "What is the revenue growth in the financial overview section?"
+
+Naive vector search may retrieve:
+
+* footnotes
+* unrelated tables
+* appendix content
+
+PageIndex improves accuracy by **constraining retrieval to relevant document sections**.
+
+---
+
+# 7. Cost-Aware Architecture
+
+Vision models provide superior extraction accuracy but are **10–100× more expensive** than text-based methods.
+
+Example approximate costs:
+
+| Method            | Cost per Page |
+| ----------------- | ------------- |
+| Text extraction   | ~0.001        |
+| Layout parsing    | ~0.01         |
+| Vision extraction | ~0.10+        |
+
+If a 200-page document used vision extraction for all pages, cost would increase dramatically.
+
+The refinery instead uses **progressive escalation**:
+
+```
+Fast Text → Layout → Vision
+```
+
+Only pages with **low extraction confidence** trigger expensive vision processing.
+
+This design reduces processing cost while maintaining accuracy.
+
+---
+
+# 8. Architecture Design Principles
+
+The system follows several engineering principles:
+
+### 1. Strategy Pattern
+
+Extraction methods are implemented as interchangeable strategies.
+
+```
+BaseExtractor
+ ├ FastTextExtractor
+ ├ LayoutExtractor
+ └ VisionExtractor
+```
+
+This allows new strategies to be added without modifying the pipeline.
+
+---
+
+### 2. Typed Data Contracts
+
+All pipeline artifacts are defined using **Pydantic models**:
+
+* DocumentProfile
+* ExtractedDocument
+* LDU
+* PageIndex
+* ProvenanceChain
+
+Typed schemas ensure **validation and interoperability between stages**.
+
+### 3. Final Pipeline Architecture
+
+```bash
+PDF
+ │
+ ▼
+TriageAgent
+ │
+ ▼
+ExtractorAgent
+ │
+ ▼
+SemanticChunker
+ │
+ ▼
+LDUs
+ │
+ ├── PageIndexBuilder
+ │
+ ├── VectorStore
+ │
+ └── FactTableStore
+        │
+        ▼
+      QueryAgent
+        │
+        ▼
+     AuditAgent
+```
+---
+
+### 3. Configurable Routing
+
+Extraction rules are externalized in:
+
+```
+rubric/extraction_rules.yaml
+```
+
+This allows **new document types to be supported without modifying code**.
+
+---
+
+# 9. Why This Architecture Matters
+
+Enterprise document systems must satisfy three requirements:
+
+1. **Accuracy** — Extract structured information faithfully.
+2. **Traceability** — Every claim must map back to a source location.
+3. **Cost Efficiency** — Processing large document corpora must remain affordable.
+
+The Document Intelligence Refinery addresses all three through:
+
+* adaptive extraction routing
+* semantic chunking with LDUs
+* hierarchical indexing with PageIndex
+* provenance-preserving query responses
+
+---
+
+# Key Takeaways
+
+1. Document extraction requires **adaptive strategies**, not a single OCR pipeline.
+2. Logical Document Units preserve semantic meaning better than token chunking.
+3. Provenance chains are essential for trustworthy document intelligence systems.
+4. Cost-aware routing ensures scalable processing across large document corpora.
+
+---

@@ -1,179 +1,402 @@
 
-
 ---
 
 # Document Intelligence Refinery
 
+A **production-grade, agent-driven document intelligence pipeline** that transforms heterogeneous documents (PDFs, scans, images) into **structured, queryable knowledge**.
 
-The **Document Intelligence Refinery** is a modular, agent-driven pipeline for analyzing, parsing, and structuring heterogeneous documents (PDFs, scans, images). It features a **triage stage** to classify document properties and a **multi-strategy extraction engine** that adapts based on origin, layout, and estimated extraction cost. Extraction strategies include:
-
-* **Strategy A – FastTextExtractor**: Fast, low-cost text extraction for native digital documents.
-* **Strategy B – LayoutExtractor (Docling/ MinerU)**: Layout-aware extraction for table-heavy or multi-column documents.
-* **Strategy C – VisionExtractor**: Vision-augmented extraction for scanned/low-confidence documents.
-
-A **confidence-gated router** escalates extraction automatically if the initial strategy yields low confidence. All extraction events are logged in `.refinery/extraction_ledger.jsonl` for traceability and auditing.
-
----
-## Author:
-
-Name: Amare kassa
-email: amaremek@gmail.com
+The system applies a **multi-stage agent architecture** to classify documents, extract structured content, build semantic document units, and enable **retrieval-augmented querying with provenance verification**.
 
 ---
 
-## Requirements
+# Author
 
-* Python 3.12+
+**Name:** Amare Kassa
+
+**Email:** [amaremek@gmail.com](mailto:amaremek@gmail.com)
+
+**LinkedIn:** [https://www.linkedin.com/in/amaremek/](https://www.linkedin.com/in/amaremek/)
+
+---
+
+# Overview
+
+The **Document Intelligence Refinery** processes documents through a staged pipeline:
+
+```
+Document
+   ↓
+[1] Triage Agent
+   ↓
+[2] Multi-Strategy Extraction Router
+   ↓
+[3] Semantic Chunking Engine (LDUs)
+   ↓
+[4] PageIndex Builder
+   ↓
+[5] Vector Embedding + Retrieval
+   ↓
+[6] Query Agent + Audit Verification
+```
+
+Each stage produces structured artifacts stored in the `.refinery/` workspace for **traceability, auditing, and reproducibility**.
+
+---
+
+# Extraction Strategy Engine
+
+The system uses **adaptive extraction strategies** depending on document characteristics.
+
+| Strategy                      | Use Case              | Description                    |
+| ----------------------------- | --------------------- | ------------------------------ |
+| **FastTextExtractor**         | Native digital PDFs   | Fast text extraction           |
+| **LayoutExtractor (Docling)** | Table-heavy documents | Layout-aware parsing           |
+| **VisionExtractor**           | Scanned documents     | Vision-assisted OCR extraction |
+
+A **confidence-gated router** escalates extraction automatically if the initial strategy fails.
+
+All extraction attempts are logged in:
+
+```
+.refinery/extraction_ledger.jsonl
+```
+
+---
+
+# Requirements
+
+* Python **3.12+**
 * `uv` package manager
-* Core dependencies: `pydantic`, `pytest`, `pdfplumber`
-* Layout strategy: `docling`, `torch`, `transformers`
-* Optional: `minerU` (alternative to Docling)
+* Linux / macOS recommended
+
+Core libraries:
+
+* `pydantic`
+* `pytest`
+* `pdfplumber`
+* `sentence-transformers`
+* `torch`
+* `transformers`
+* `docling` (layout extraction)
 
 ---
 
-## Setup
+# Setup
 
-### 1. Create environment
+## 1. Clone the Repository
+
+```bash
+git clone https://github.com/amare1990/document-intelligence-refinery.git
+cd document-intelligence-refinery
+```
+
+---
+
+# 2. Create Environment
 
 ```bash
 uv venv
 source .venv/bin/activate
 ```
 
-### 2. Install dependencies
+---
+
+# 3. Install Dependencies
 
 ```bash
-# Core
-uv install
 uv sync
+```
 
-# Layout strategy (Docling)
+Optional layout extraction dependencies:
+
+```bash
 uv add git+https://github.com/DS4SD/docling.git
 uv add torch transformers
 ```
 
 ---
 
-## Project Structure
+# 4. Configure Environment Variables
 
-```text
+Copy the example environment file:
+
+```bash
+cp .env.example .env
+```
+
+Then edit `.env` and insert your API keys:
+
+```
+GEMINI_API_KEY=your_actual_key_here
+
+OPENAI_API_KEY=your_openai_api_key_here
+
+```
+
+---
+
+# Project Structure
+
+```
 src/
+│
 ├── agents/
-│   ├── triage.py              # Stage 1: TriageAgent
-│   └── extractor.py           # Stage 2: ExtractionRouter
+│   ├── triage.py
+│   ├── extractor.py
+│   ├── indexer.py
+│   ├── query_agent.py
+│   └── audit_agent.py
+│
 ├── models/
 │   ├── document_profile.py
 │   ├── extracted_document.py
 │   ├── ldu.py
 │   ├── page_index.py
-│   └── provenance_chain.py
+│   ├── provenance_chain.py
+│   └── audit_result.py
+│
+├── adapters/
+│   ├── embedding_store.py
+│   └── fact_table_store.py
+│
 ├── strategies/
 │   ├── fast_text_extractor.py
 │   ├── layout_extractor.py
 │   └── vision_extractor.py
+│
 ├── pipelines/
 │   ├── run_triage_batch.py
-│   └── run_extraction_batch.py
+│   ├── run_extraction_batch.py
+│   ├── run_chunking.py
+│   ├── run_page_index.py
+│   ├── run_build_vector_index.py
+│   ├── run_query_agent_semantic.py
+│   └── run_refinery_pipeline.py
+│
 └── utils/
     ├── pdf_stats.py
-    └── language.py
-    └── ledger.py
-    └── pdf_stats.py
-
-.refinery/
-├── profiles/                  # JSON output from TriageAgent
-└── extraction_ledger.jsonl    # Logs extraction attempts
-rubric/
-└── extraction_rules.yaml      # Chunking thresholds and rules
-data/
-└── *.pdf                      # Source documents for testing
+    ├── language.py
+    ├── ledger.py
+    └── page_index_lookup.py
 ```
 
 ---
 
-## Usage
-### Assume
+# Refinery Workspace
+
+The pipeline generates artifacts in the `.refinery/` directory.
+
 ```
-sample-pdf
+.refinery/
+│
+├── profiles/
+├── extractions/
+├── ldus/
+├── page_index/
+└── extraction_ledger.jsonl
 ```
 
-### 1. Run Triage (Stage 1)
+These artifacts allow **reproducible document analysis**.
 
-**Single PDF:**
+---
 
+# Usage
+
+Assume a document:
+
+```
+data/sample.pdf
+```
+
+---
+
+# Stage 1 — Run Triage
+
+Analyze document characteristics.
+
+Single document:
 
 ```bash
-uv run python -m src.pipelines.run_triage_batch "data/sample-pdf"
+uv run python -m src.pipelines.run_triage_batch data/sample.pdf
 ```
 
-**Batch mode (all PDFs in `data/`):**
+Batch mode:
 
 ```bash
 uv run python -m src.pipelines.run_triage_batch
 ```
 
-### 2. Run Extraction (Stage 2)
+Output:
 
-**Single PDF:**
-
-```bash
-uv run python -m src.pipelines.run_extraction_batch "data/sample-pdf"
+```
+.refinery/profiles/
 ```
 
-**Batch mode:**
+---
+
+# Stage 2 — Run Extraction
+
+Single document:
+
+```bash
+uv run python -m src.pipelines.run_extraction_batch data/sample.pdf
+```
+
+Batch mode:
 
 ```bash
 uv run python -m src.pipelines.run_extraction_batch
 ```
 
----
-
-### 3. Run Layout Extraction
-
-```bash
-
-uv run python -m src.pipelines.run_layout_extraction "data/sample-pdf"
-```
-
-### 4. Run Vision Extraction
-#### Assume a DocumentedProfile
+Output:
 
 ```
-sample-DocProfile
-
-```
-
-
-```bash
-
-uv run python -m src.pipelines.run_vision_extraction --profile ".refinery/profiles/sample-DocProfile"
-
+.refinery/extractions/
 ```
 
 ---
 
-## Testing
+# Stage 3 — Semantic Chunking (LDUs)
 
-Unit tests cover:
+Generate **Logical Document Units**.
 
-* TriageAgent classification (`origin_type`, `layout_complexity`, `domain_hint`)
-* ExtractionRouter confidence-gated escalation
-* FastText, Layout (Docling), and Vision strategies
+Single document:
 
-Run all tests:
+```bash
+uv run python -m src.pipelines.run_chunking \
+--extraction ".refinery/extractions/document_extracted.json"
+```
+
+Batch mode:
+
+```bash
+uv run python -m src.pipelines.run_chunking --batch
+```
+
+Output:
+
+```
+.refinery/ldus/
+```
+
+---
+
+# Stage 4 — Build Page Index
+
+Creates hierarchical document navigation.
+
+Single document:
+
+```bash
+uv run python -m src.pipelines.run_page_index \
+--ldu_file ".refinery/ldus/doc_ldus.json"
+```
+
+Batch mode:
+
+```bash
+uv run python -m src.pipelines.run_page_index --batch
+```
+
+Output:
+
+```
+.refinery/page_index/
+```
+
+---
+
+# Stage 5 — Build Vector Index
+
+Generate embeddings for semantic search.
+
+```bash
+uv run python -m src.pipelines.run_build_vector_index \
+--extraction ".refinery/extractions/document_extracted.json"
+```
+
+---
+
+# Stage 6 — Query Agent
+
+Run semantic queries against the document.
+
+```bash
+uv run python -m src.pipelines.run_query_agent_semantic \
+  --query "Expired ROUA" \
+  --extractions-dir ".refinery/extractions" \
+  --pageindex-dir ".refinery/page_index" \
+  --top-k 5
+```
+
+---
+
+# Run Full Pipeline
+
+Process a document end-to-end.
+
+```bash
+uv run python -m src.pipelines.run_refinery_pipeline \
+    --pdf data/financial_report.pdf
+```
+
+Run pipeline with query:
+
+```bash
+uv run python -m src.pipelines.run_refinery_pipeline \
+    --pdf data/financial_report.pdf \
+    --query "What was the revenue growth?"
+```
+
+---
+
+# Testing
+
+Run all unit tests:
 
 ```bash
 uv run python -m pytest
 ```
 
----
+Tests cover:
 
-## Configuration
-
-* **`rubric/extraction_rules.yaml`** – Thresholds for scanned vs native, table detection, and confidence gating
-* **`.refinery/profiles/`** – Stores `DocumentProfile` JSONs
-* **`.refinery/extraction_ledger.jsonl`** – Logs each extraction: strategy, confidence, cost, and processing time
+* Triage classification
+* Extraction strategy routing
 
 ---
 
+# Configuration
+
+Key configuration files:
+
+```
+rubric/extraction_rules.yaml
+```
+
+Defines:
+
+* scanned vs native thresholds
+* table detection rules
+* confidence gating thresholds
+
+---
+
+# Key Features
+
+* Agent-driven document processing
+* Multi-strategy extraction engine
+* Confidence-gated strategy escalation
+* Semantic chunking (LDUs)
+* Hierarchical page indexing
+* Retrieval-augmented querying
+* Evidence verification via Audit Agent
+* Full pipeline reproducibility
+
+---
+
+# License
+
+MIT License
+
+---
 
