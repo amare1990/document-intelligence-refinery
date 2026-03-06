@@ -17,6 +17,8 @@ class ProvenanceStep(BaseModel):
     content_hash: str
     confidence: float
 
+    section_path: List[str] = []  # Optional: hierarchical section path (e.g. ["Introduction", "Background"])
+
 
 class ProvenanceChain(BaseModel):
     """
