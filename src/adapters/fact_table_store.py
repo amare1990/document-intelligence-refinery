@@ -1,9 +1,11 @@
 
-# FactTableStore: A simple SQLite-based store for structured facts extracted from documents.
+"""
+FactTableStore: A simple SQLite-based store for structured facts extracted from documents.
+"""""
+
 # src/adapters/fact_table_store.py
 
 import sqlite3
-from pathlib import Path
 
 
 class FactTableStore:
@@ -29,6 +31,10 @@ class FactTableStore:
 
         self.conn.commit()
 
+    # -----------------------------
+    # INSERT FACT
+    # -----------------------------
+
     def insert_fact(self, doc_id, table_id, row_index, column_name, value):
 
         self.conn.execute(
@@ -42,7 +48,7 @@ class FactTableStore:
         self.conn.commit()
 
     # -----------------------------
-    # NEW: Structured Query Method
+    # GENERIC SQL QUERY
     # -----------------------------
 
     def query(self, sql: str):
@@ -53,3 +59,35 @@ class FactTableStore:
         rows = cursor.fetchall()
 
         return [dict(row) for row in rows]
+
+    # -----------------------------
+    # TYPED QUERY HELPERS
+    # -----------------------------
+
+    def total_revenue(self):
+
+        cursor = self.conn.execute(
+            """
+            SELECT SUM(CAST(value AS FLOAT)) AS total
+            FROM facts
+            WHERE column_name='revenue'
+            """
+        )
+
+        row = cursor.fetchone()
+        return row["total"] if row else None
+
+    def revenue_by_year(self, year: str):
+
+        cursor = self.conn.execute(
+            """
+            SELECT *
+            FROM facts
+            WHERE column_name='revenue'
+            """
+        )
+
+        rows = cursor.fetchall()
+
+        # simple filtering since schema doesn't store year separately
+        return [dict(r) for r in rows if year in str(r["value"])]
