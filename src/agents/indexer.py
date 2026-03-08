@@ -9,9 +9,15 @@ Each section node contains:
 - page_start
 - page_end
 - summary (LLM generated)
+- keywords
+- key_entities
+- data_types_present (tables, figures, equations)
 """
 
+# src/agents/indexer.py
+
 import os
+import re
 import uuid
 from typing import Dict, List
 
@@ -21,7 +27,7 @@ from google import genai
 from src.models.page_index import PageIndex, PageNode
 from src.models.extracted_document import ExtractedDocument
 
-load_dotenv()
+load_dotenv(".env")
 
 # Initialize Gemini client once
 api_key = os.getenv("GEMINI_API_KEY")
@@ -55,6 +61,44 @@ Summarize the following document section in 2 concise sentences.
     return "Summary unavailable."
 
 
+def extract_entities(text: str) -> List[str]:
+    """
+    Very simple entity extraction using capitalization heuristic.
+    """
+
+    entities = re.findall(r"\b[A-Z][a-zA-Z]{2,}\b", text)
+
+    return list(set(entities))[:10]
+
+def detect_data_types(text: str) -> List[str]:
+
+    types = []
+
+    if "|" in text:
+        types.append("table")
+
+    if re.search(r"(Figure|Fig\.)\s*\d+", text):
+        types.append("figure")
+
+    if re.search(r"=|\\frac|\\sum", text):
+        types.append("equation")
+
+    return types
+
+def extract_keywords(text: str) -> List[str]:
+
+    words = re.findall(r"\b[a-zA-Z]{5,}\b", text.lower())
+
+    freq = {}
+
+    for w in words:
+        freq[w] = freq.get(w, 0) + 1
+
+    sorted_words = sorted(freq.items(), key=lambda x: x[1], reverse=True)
+
+    return [w for w, _ in sorted_words[:5]]
+
+
 class PageIndexer:
     """
     Builds a PageIndex tree from document LDUs.
@@ -66,8 +110,7 @@ class PageIndexer:
             node_id=str(uuid.uuid4()),
             title="Document Root",
             page_start=1,
-            page_end=1,
-            children=[]
+            page_end=max((ldu.page_number for ldu in extracted_doc.ldus), default=1)
         )
 
         section_map: Dict[str, PageNode] = {}
@@ -89,10 +132,7 @@ class PageIndexer:
                     node_id=str(uuid.uuid4()),
                     title=section,
                     page_start=ldu.page_number,
-                    page_end=ldu.page_number,
-                    children=[],
-                    summary=None,
-                    keywords=[]
+                    page_end=ldu.page_number
                 )
 
                 section_map[section] = node
@@ -112,6 +152,12 @@ class PageIndexer:
                 node.summary = generate_summary(combined_text)
             except Exception:
                 node.summary = "Summary unavailable."
+
+            node.key_entities = extract_entities(combined_text)
+
+            node.data_types_present = detect_data_types(combined_text)
+
+            node.keywords = extract_keywords(combined_text)
 
         return PageIndex(
             doc_id=extracted_doc.doc_id,

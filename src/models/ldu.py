@@ -39,6 +39,14 @@ class LDU(BaseModel):
     token_count: int
     confidence: float = Field(ge=0.0, le=1.0)
 
+    chunk_type: str = Field(
+        default="paragraph",
+        description="paragraph | table | figure | list | header"
+    )
+
+    metadata: dict = Field(default_factory=dict)
+    references: list[str] = Field(default_factory=list)
+
     @classmethod
     def from_text(
         cls,

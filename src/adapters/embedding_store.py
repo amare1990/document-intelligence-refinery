@@ -65,7 +65,10 @@ class LDUVectorStore:
         vectors = []
 
         for ldu in ldus:
-            emb = self.embed_text(ldu.text)
+
+            emb = self.embed_text(
+                f"{ldu.section_path} :: {ldu.text}"
+            )
 
             vectors.append(emb)
             self.ids.append(ldu.ldu_id)

@@ -8,6 +8,11 @@ Provides helpers for:
 3. Navigating the PageIndex using a query
 """
 
+# src/utils/page_index_lookup.py
+
+import os
+from dotenv import load_dotenv
+
 import json
 from pathlib import Path
 from typing import List, Optional
@@ -15,7 +20,11 @@ from typing import List, Optional
 from src.models.page_index import PageIndex, PageNode
 
 
-INDEX_DIR = Path(".refinery/page_index")
+load_dotenv(".env")
+
+INDEX_DIR = Path(
+    os.getenv("PAGE_INDEX_DIR", ".refinery/page_index")
+)
 
 
 # --------------------------------------------------
@@ -77,28 +86,39 @@ def find_section_by_page(
 def find_relevant_sections(
     node: PageNode,
     query: str,
-    results: Optional[List[str]] = None
+    results: Optional[List[tuple[int, str]]] = None
 ) -> List[str]:
-    """
-    Traverse the PageIndex tree and find sections relevant
-    to a query using title/summary/keywords matching.
-    """
 
     if results is None:
         results = []
 
     q = query.lower()
 
-    searchable_text = " ".join([
-        node.title or "",
-        node.summary or "",
-        " ".join(node.keywords) if node.keywords else ""
-    ]).lower()
+    score = 0
 
-    if q in searchable_text:
-        results.append(node.title)
+    if q in (node.title or "").lower():
+        score += 3
+
+    if node.summary and q in node.summary.lower():
+        score += 2
+
+    if node.keywords:
+        if any(q in kw.lower() for kw in node.keywords):
+            score += 1
+
+    if node.key_entities:
+        if any(q in ent.lower() for ent in node.key_entities):
+            score += 1
+
+    if score > 0:
+        results.append((score, node.title))
 
     for child in node.children:
         find_relevant_sections(child, query, results)
 
-    return results
+    # Only convert to List[str] at the root
+    if node.title == "Document Root":
+        results.sort(reverse=True)
+        return [title for _, title in results]
+
+    return []
