@@ -63,6 +63,7 @@ class LDUVectorStore:
     def add_ldus(self, ldus: List[LDU]):
 
         vectors = []
+        metadata_records = []
 
         for ldu in ldus:
 
@@ -71,12 +72,32 @@ class LDUVectorStore:
             )
 
             vectors.append(emb)
+
+            metadata_records.append({
+                "ldu_id": ldu.ldu_id,
+                "doc_id": ldu.doc_id,
+                "chunk_type": ldu.chunk_type,
+                "parent_section": ldu.section_path[0] if ldu.section_path else None,
+                "page_refs": [ldu.page_number],
+                "content_hash": ldu.content_hash
+            })
+
             self.ids.append(ldu.ldu_id)
             self.ldus.append(ldu)
 
         if vectors:
-            matrix = np.vstack(vectors)
-            self.index.add(matrix)                  # type: ignore
+            matrix = np.vstack(vectors).astype(np.float32)
+            self.index.add(matrix) # type: ignore
+
+        if META_FILE.exists():
+            existing = json.loads(META_FILE.read_text())
+        else:
+            existing = []
+
+        existing.extend(metadata_records)
+
+        META_FILE.write_text(json.dumps(existing, indent=2))
+
 
     def search(self, query: str, top_k: int = 5):
 
@@ -102,12 +123,8 @@ class LDUVectorStore:
         return results
 
     def save(self):
-
         faiss.write_index(self.index, str(INDEX_FILE))
 
-        metadata = [ldu.model_dump() for ldu in self.ldus]
-
-        META_FILE.write_text(json.dumps(metadata, indent=2))
 
     def _load_metadata(self):
 
