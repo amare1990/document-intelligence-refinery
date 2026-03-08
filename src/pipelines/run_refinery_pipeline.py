@@ -26,9 +26,6 @@ from src.adapters.embedding_store import LDUVectorStore
 
 from src.models.extracted_document import ExtractedDocument
 
-from src.utils.fact_extractor import extract_facts_from_ldus
-from src.adapters.fact_table_store import FactTableStore
-
 
 REFINERY = Path(".refinery")
 LDUS_DIR = REFINERY / "ldus"
@@ -103,16 +100,6 @@ def run_pipeline(pdf_path: str, query: str | None = None):
 
     print(f"LDUs generated: {len(enriched.ldus)}")
     print(f"Saved LDUs → {ldu_file}")
-
-    # ---------------------------------------------------
-    # Stage 3.5 — FACT EXTRACTION
-    fact_store = FactTableStore()
-
-    extract_facts_from_ldus(
-        doc_id=enriched.doc_id,
-        ldus=enriched.ldus,
-        store=fact_store
-    )
 
     # ---------------------------------------------------
     # Stage 4 — PAGE INDEX

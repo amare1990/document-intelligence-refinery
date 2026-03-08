@@ -38,13 +38,13 @@ def detect_period(text: str):
 
 
 def extract_facts_from_table(
-        doc_id: str,
-        table_id: str,
-        rows: List[List[str]],
-        page: int,
-        section: str,
-        store,
-    ):
+    doc_id: str,
+    table_id: str,
+    rows: List[List[str]],
+    page: int,
+    section: str,
+    store,
+):
 
     if not rows or len(rows) < 2:
         return
@@ -71,27 +71,3 @@ def extract_facts_from_table(
                 column_name=measure,
                 value=value,
             )
-
-
-def extract_facts_from_ldus(doc_id, ldus, store):
-
-    for ldu in ldus:
-
-        # detect table-like chunks
-        if ldu.chunk_type != "table":
-            continue
-
-        rows = [r.split("|") for r in ldu.text.split("\n") if "|" in r]
-
-        if len(rows) < 2:
-            continue
-
-        extract_facts_from_table(
-            doc_id=doc_id,
-            table_id=ldu.ldu_id,
-            rows=rows,
-            page=ldu.page_number,
-            section=ldu.section_path[0] if ldu.section_path else "",
-            store=store
-        )
-
